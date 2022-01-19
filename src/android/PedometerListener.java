@@ -16,19 +16,29 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 
+import android.os.Build;
 import android.os.Handler;
 import android.os.Bundle;
+
+import android.util.Log;
 
 /**
  * This class listens to the pedometer sensor
  */
 public class PedometerListener extends CordovaPlugin implements SensorEventListener, StepListener {
+
+    private final  String TAG        = "PedometerListener";
+    private final String ACTION_GET_HISTORY      = "getHistory";
+    public static final String USER_DATA_PREF              = "UserData";
 
     public static int STOPPED = 0;
     public static int STARTING = 1;
@@ -87,9 +97,8 @@ public class PedometerListener extends CordovaPlugin implements SensorEventListe
         this.callbackContext = callbackContext;
 
         if (action.equals("isStepCountingAvailable")) {
-            Sensor stepCounter = this.sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
             Sensor accel = this.sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-            if (accel != null || stepCounter != null) {
+            if (accel != null) {
                 this.win(true);
                 return true;
             } else {
@@ -107,14 +116,16 @@ public class PedometerListener extends CordovaPlugin implements SensorEventListe
             return true;
         }
         else if (action.equals("startPedometerUpdates")) {
-            if (this.status != PedometerListener.RUNNING) {
-                // If not running, then this is an async call, so don't worry about waiting
-                // We drop the callback onto our stack, call start, and let start and the sensor callback fire off the callback down the road
-                this.start();
-            }
-            PluginResult result = new PluginResult(PluginResult.Status.NO_RESULT, "");
-            result.setKeepCallback(true);
-            callbackContext.sendPluginResult(result);
+            Log.i(TAG, "startPedoUpdates");
+
+            Activity activity = cordova.getActivity();
+            Intent intent = new Intent(activity, ForegroundService.class);
+            intent.setAction("start");
+
+            Context context = this.cordova.getContext();
+            context.startService(intent);
+
+            this.win(null);
             return true;
         }
         else if (action.equals("stopPedometerUpdates")) {
@@ -123,10 +134,26 @@ public class PedometerListener extends CordovaPlugin implements SensorEventListe
             }
             this.win(null);
             return true;
-        } else {
-            // Unsupported action
-            return false;
         }
+        else if (action.equals(ACTION_GET_HISTORY)) {
+          //Get stored value for pedometerActive
+          Activity activity = cordova.getActivity();
+          SharedPreferences sharedPref = activity.getSharedPreferences(USER_DATA_PREF, Context.MODE_PRIVATE);
+
+          if(sharedPref.contains(ForegroundService.HISTORY_PREF)){
+            String pDataString = sharedPref.getString(ForegroundService.HISTORY_PREF,"{}");
+            Log.i(TAG, "Getting steps history from stepCounterService: " + pDataString);
+            callbackContext.success(pDataString);
+          }else{
+            Log.i(TAG, "No steps history found in stepCounterService !");
+            callbackContext.success("{}");
+          }
+
+          return true;
+        }
+
+        // Unsupported action
+        return false;
     }
 
     /**
@@ -142,8 +169,11 @@ public class PedometerListener extends CordovaPlugin implements SensorEventListe
      * Start listening for pedometers sensor.
      */
     private void start() {
+        Log.i(TAG, "start pedo updates func");
+
         // If already starting or running, then return
         if ((this.status == PedometerListener.RUNNING) || (this.status == PedometerListener.STARTING)) {
+            Log.i(TAG, "Already running though");
             return;
         }
 
@@ -153,11 +183,13 @@ public class PedometerListener extends CordovaPlugin implements SensorEventListe
         this.setStatus(PedometerListener.STARTING);
 
         // Get pedometer or accelerometer from sensor manager
-        this.mSensor = this.sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
-        if(this.mSensor == null) this.mSensor = this.sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        this.mSensor = this.sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        Log.i(TAG, "Going for it");
 
         // If found, then register as listener
         if (this.mSensor != null) {
+            Log.i(TAG, "Found a sensor");
+
             int sensorDelay = this.mSensor.getType() == Sensor.TYPE_STEP_COUNTER ? SensorManager.SENSOR_DELAY_UI : SensorManager.SENSOR_DELAY_FASTEST;
             if (this.sensorManager.registerListener(this, this.mSensor, sensorDelay)) {
                 this.setStatus(PedometerListener.STARTING);
@@ -167,6 +199,7 @@ public class PedometerListener extends CordovaPlugin implements SensorEventListe
                 return;
             };
         } else {
+            Log.i(TAG, "Unable to find sensor!");
             this.setStatus(PedometerListener.ERROR_FAILED_TO_START);
             this.fail(PedometerListener.ERROR_FAILED_TO_START, "No sensors found to register step counter listening to.");
             return;
@@ -222,7 +255,7 @@ public class PedometerListener extends CordovaPlugin implements SensorEventListe
         }else if(this.mSensor.getType() == Sensor.TYPE_ACCELEROMETER) {
             stepDetector.updateAccel(
                 event.timestamp, event.values[0], event.values[1], event.values[2]);
-            
+
         }
     }
 

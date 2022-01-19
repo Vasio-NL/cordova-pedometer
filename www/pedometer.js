@@ -1,4 +1,3 @@
-
 var exec = require("cordova/exec");
 
 var Pedometer = function () {
@@ -25,8 +24,11 @@ Pedometer.prototype.stopPedometerUpdates = function (onSuccess, onError) {
     exec(onSuccess, onError, "Pedometer", "stopPedometerUpdates", []);
 };
 
-Pedometer.prototype.queryData = function (onSuccess, onError, options) {
-    exec(onSuccess, onError, "Pedometer", "queryData", [options]);
+Pedometer.prototype.getHistory = function (onSuccess, onError) {
+    cordova.exec(function(result){
+        var parsedResult = JSON.parse(result);
+        onSuccess(parsedResult);
+    },onError, "Pedometer", "getHistory", []);
 };
 
 module.exports = new Pedometer();

@@ -29,6 +29,23 @@
                 <param name="android-package" value="com.emesonsantana.cordova.pedometer.PedometerListener" />
             </feature>
         </config-file>
+
+        <config-file target="AndroidManifest.xml" parent="/*">
+            <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+            <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+        </config-file>
+
+        <config-file target="AndroidManifest.xml" parent="application">
+            <service android:enabled="true" android:name="com.emesonsantana.cordova.pedometer.ForegroundService" />
+            <receiver android:exported="false" android:name="com.emesonsantana.cordova.pedometer.PedometerBootReceiver">
+                <intent-filter>
+                    <action android:name="android.intent.action.BOOT_COMPLETED" />
+                </intent-filter>
+            </receiver>
+        </config-file>
+
+        <source-file src="src/android/ForegroundService.java" target-dir="src/com/emesonsantana/cordova/pedometer" />
+        <source-file src="src/android/PedometerBootReceiver.java" target-dir="src/com/emesonsantana/cordova/pedometer" />
         <source-file src="src/android/PedometerListener.java" target-dir="src/com/emesonsantana/cordova/pedometer" />
         <source-file src="src/android/SensorFusionMath.java" target-dir="src/com/emesonsantana/cordova/pedometer" />
         <source-file src="src/android/StepDetector.java" target-dir="src/com/emesonsantana/cordova/pedometer" />
