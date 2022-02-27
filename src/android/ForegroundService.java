@@ -1,5 +1,8 @@
 package com.emesonsantana.cordova.pedometer;
 
+import android.annotation.SuppressLint;
+import android.app.AlarmManager;
+import android.app.PendingIntent;
 import android.content.Intent;
 import android.content.Context;
 import android.app.Service;
@@ -14,6 +17,7 @@ import android.hardware.SensorManager;
 import android.os.IBinder;
 import android.os.Bundle;
 import android.annotation.TargetApi;
+import android.os.PowerManager;
 import android.util.Log;
 
 import com.vasio.iamokay.R;
@@ -31,6 +35,7 @@ public class ForegroundService extends Service implements SensorEventListener, S
   private SensorManager sensorManager; // Sensor manager
   private Sensor mSensor;             // Pedometer sensor returned by sensor manager
   private StepDetector stepDetector;
+  private PowerManager.WakeLock wakelock = null;
 
   public ForegroundService() {
     Log.i(TAG, "Construct foreground");
@@ -41,12 +46,9 @@ public class ForegroundService extends Service implements SensorEventListener, S
 
   @Override
   public int onStartCommand(Intent intent, int flags, int startId) {
-    Log.i(TAG, "onStartCommand");
-    Log.i(TAG, intent.getAction());
-
-    if (intent.getAction().equals("start")) {
+    if (intent == null || intent.getAction().equals("start")) {
       // Start the service
-      startPluginForegroundService(intent.getExtras());
+      startPluginForegroundService(intent != null ? intent.getExtras() : null);
       doInit();
     } else {
       // Stop the service
@@ -108,8 +110,27 @@ public class ForegroundService extends Service implements SensorEventListener, S
     startForeground(id != 0 ? id : 197812504, notification);
   }
 
+  @SuppressLint("WakelockTimeout")
   public void doInit() {
     Log.i(TAG, "Registering TYPE_ACCELEROMETER sensor");
+
+    if(this.wakelock == null) {
+      PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
+      this.wakelock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "IAMOKAY::WakelockTag");
+    }
+    if(!this.wakelock.isHeld()) {
+      this.wakelock.acquire();
+    }
+
+    AlarmManager am =(AlarmManager)getSystemService(Context.ALARM_SERVICE);
+
+    Context context = this.getApplicationContext();
+    Intent stepCounterServiceIntent = new Intent(context, ForegroundService.class);
+    stepCounterServiceIntent.setAction("start");
+
+    Intent i = new Intent(context, PedometerBootReceiver.class);
+    PendingIntent pi = PendingIntent.getBroadcast(context, 0, i, 0);
+    am.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis(), 1000 * 60, pi); // Millisec * Second * Minute
 
     this.sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
     this.mSensor    = this.sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
@@ -183,5 +204,14 @@ public class ForegroundService extends Service implements SensorEventListener, S
     }
     editor.putString(ForegroundService.HISTORY_PREF,pData.toString());
     editor.commit();
+  }
+
+  @Override
+  public void onDestroy() {
+    super.onDestroy();
+    Log.i(TAG, "ondestroy! trigger restart");
+    Intent broadcastIntent = new Intent(this, PedometerBootReceiver.class);
+
+    sendBroadcast(broadcastIntent);
   }
 }
